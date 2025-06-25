@@ -19,11 +19,14 @@ func main() {
 	defer listener.Close()
 
 	fmt.Printf("Listening for tcp traffic on port %s\n", port)
+
 	for {
 		conn, err := listener.Accept()
 		if err != nil {
-			log.Fatal(err)
+			log.Printf("Error accepting connection: %v", err)
+			continue
 		}
+
 		fmt.Println("Accepted connection from", conn.RemoteAddr())
 		
 		ch := getLinesChannel(conn)
@@ -38,12 +41,15 @@ func main() {
 
 func getLinesChannel(f io.ReadCloser) <-chan string {
 	lines := make(chan string)
+
 	go func() {
 		defer f.Close()
 		defer close(lines)
+
 		currentLineContents := ""
+		b := make([]byte, 8, 8)
+		
 		for {
-			b := make([]byte, 8, 8)
 			n, err := f.Read(b)
 			if err != nil {
 				if currentLineContents != "" {
