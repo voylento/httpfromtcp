@@ -1,7 +1,7 @@
 package request
 
 import (
-	"errors"
+	"bytes"
 	"fmt"
 	"io"
 	"regexp"
@@ -18,52 +18,65 @@ type RequestLine struct {
 }
 
 var httpMethodRegex = regexp.MustCompile(`^[A-Z]+$`)
-
-func parseRequestLine(requestString string) (*Request, error) {
-	requestLines := strings.Split(requestString, "\r\n")
-
-	if len(requestLines) == 0 || requestLines[0] == "" {
-		return nil, errors.New("empty request")
-	}
-
-	requestLineParts := strings.Fields(requestLines[0])
-	if len(requestLineParts) != 3 {
-		return nil, errors.New("invalid request line format")
-	}
-
-	httpVersion := requestLineParts[2]
-	if strings.HasPrefix(httpVersion, "HTTP/") {
-		httpVersion = strings.TrimPrefix(httpVersion, "HTTP/")
-	}
-
-	if httpVersion != "1.1" {
-		return nil, errors.New("Only HTTP/1.1 is supported")
-	}
-
-	if !httpMethodRegex.MatchString(requestLineParts[0]) {
-		return nil, errors.New("HTTP method must contain only uppercase letters")
-	}
-		
-	request := &Request{
-		RequestLine: RequestLine{
-			Method:					requestLineParts[0],
-			RequestTarget:	requestLineParts[1],
-			HttpVersion:		httpVersion,
-		},
-	}
-
-
-	return request, nil
-}
+const crlf = "\r\n"
 
 func RequestFromReader(reader io.Reader) (*Request, error) {
-	request, err := io.ReadAll(reader)
+	requestBytes, err := io.ReadAll(reader)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read from reader: %w", err)
+		return nil, err
 	}
 
-	requestString := string(request)
+	requestLine, err := parseRequestLine(requestBytes)
+	if err != nil {
+		return nil, err
+	}
+	return &Request{
+		RequestLine: *requestLine,
+	}, nil
+}
 
-	return parseRequestLine(requestString)
+func parseRequestLine(data []byte) (*RequestLine, error) {
+	idx := bytes.Index(data, []byte(crlf))
+	if idx == -1 {
+		return nil, fmt.Errorf("CRLF not found in request line")
+	}
 
+	requestLineText := string(data[:idx])
+	requestLine, err := parseRequestLineFromString(requestLineText)
+	if err != nil {
+		return nil, err
+	}
+
+	return requestLine, nil
+}
+
+func parseRequestLineFromString(str string) (*RequestLine, error) {
+	fields := strings.Fields(str)
+	if len(fields) != 3 {
+		return nil, fmt.Errorf("request line format error: %s", str)
+	}
+
+	method := fields[0]
+
+	if !httpMethodRegex.MatchString(method) {
+		return nil, fmt.Errorf("HTTP method must contain only uppercase letters")
+	}
+
+	requestTarget := fields[1]
+
+	httpVersion := fields[2]
+	if strings.HasPrefix(httpVersion, "HTTP/") {
+		httpVersion = strings.TrimPrefix(httpVersion, "HTTP/")
+		if httpVersion != "1.1" {
+			return nil, fmt.Errorf("unrecognized HTTP-version: %s", httpVersion)
+		}
+	} else {
+		return nil, fmt.Errorf("Http version invalid format")
+	}
+
+	return &RequestLine{
+			Method:					method,
+			RequestTarget:	requestTarget,	
+			HttpVersion:		httpVersion,
+		}, nil
 }
