@@ -64,14 +64,12 @@ func parseRequestLineFromString(str string) (*RequestLine, error) {
 
 	requestTarget := fields[1]
 
-	httpVersion := fields[2]
-	if strings.HasPrefix(httpVersion, "HTTP/") {
-		httpVersion = strings.TrimPrefix(httpVersion, "HTTP/")
-		if httpVersion != "1.1" {
-			return nil, fmt.Errorf("unrecognized HTTP-version: %s", httpVersion)
-		}
-	} else {
+	httpVersion, found := strings.CutPrefix(fields[2], "HTTP/") 
+	if !found {
 		return nil, fmt.Errorf("Http version invalid format")
+	}
+	if httpVersion != "1.1" {
+		return nil, fmt.Errorf("unrecognized HTTP-version: %s", httpVersion)
 	}
 
 	return &RequestLine{
