@@ -7,6 +7,8 @@ import (
 	"log"
 	"net"
 	"strings"
+
+	"voylento/httpfromtcp/internal/request"
 )
 
 const port = ":42069"
@@ -29,11 +31,16 @@ func main() {
 
 		fmt.Println("Accepted connection from", conn.RemoteAddr())
 		
-		ch := getLinesChannel(conn)
-
-		for line := range ch {
-			fmt.Println(line)
+		req, err := request.RequestFromReader(conn)
+		if err != nil {
+			fmt.Printf("Error reading request: %v", err)
+			continue
 		}
+		
+		fmt.Println("Request line:")
+		fmt.Printf("- Method: %s\n", req.RequestLine.Method)
+		fmt.Printf("- Target: %s\n", req.RequestLine.RequestTarget)
+		fmt.Printf("- Version: %s\n", req.RequestLine.HttpVersion)
 		
 		fmt.Println("Connection to ", conn.RemoteAddr(), "closed")
 	}
