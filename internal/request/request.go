@@ -6,12 +6,17 @@ import (
 	"fmt"
 	"io"
 	"regexp"
+	"strconv"
 	"strings"
+
+	"voylento/httpfromtcp/internal/headers"
 )
 
 type Request struct {
-	RequestLine RequestLine
-	state		requestState
+	RequestLine 	RequestLine
+	Headers 		headers.Headers
+	Body			[]byte
+	state			requestState
 }
 
 type RequestLine struct {
@@ -24,6 +29,8 @@ type requestState int
 
 const (
 	requestStateInitialized requestState = iota
+	requestStateParsingHeaders
+	requestStateParsingBody
 	requestStateDone
 )
 
@@ -35,6 +42,7 @@ func RequestFromReader(reader io.Reader) (*Request, error) {
 	buf := make([]byte, bufferSize)
 	readToIndex := 0
 	req := &Request{
+		Headers: headers.NewHeaders(),
 		state: requestStateInitialized,
 	}
 
@@ -48,7 +56,9 @@ func RequestFromReader(reader io.Reader) (*Request, error) {
 		numBytesRead, err := reader.Read(buf[readToIndex:])
 		if err != nil {
 			if errors.Is(err, io.EOF) {
-				req.state = requestStateDone
+				if req.state != requestStateDone {
+					return nil, fmt.Errorf("Error: EOF before request fully processed")
+				}
 				break
 			}
 			return nil, err
@@ -69,23 +79,83 @@ func RequestFromReader(reader io.Reader) (*Request, error) {
 }
 
 func (r *Request) parse(data []byte) (int, error) {
-	switch r.state {
-		case requestStateInitialized:
-			requestLine, n, err := parseRequestLine(data)
-			if err != nil {
-				return 0, err
-			}
-			if n == 0 {
-				return 0, nil
-			}
-			r.RequestLine = *requestLine
-			r.state = requestStateDone
-			return n, nil
-		case requestStateDone:
-			return 0, fmt.Errorf("Error: attempt to read data in done state") 
-		default:
-			return 0, fmt.Errorf("Error: unknown parse state: %d", r.state)
+	totalBytesParsed := 0
+
+	for r.state != requestStateDone {
+		n, err := r.parseSingle(data[totalBytesParsed:])
+		if err != nil {
+			return 0, err
+		}
+		if n == 0 {
+			return totalBytesParsed, nil
+		}
+		totalBytesParsed += n
 	}
+
+	return totalBytesParsed, nil
+}
+
+func (r *Request) parseSingle(data []byte) (int, error) {
+	switch r.state {
+	case requestStateInitialized:
+		requestLine, n, err := parseRequestLine(data)
+		if err != nil {
+			return 0, err
+		}
+		if n == 0 {
+			return 0, nil
+		}
+		r.RequestLine = *requestLine
+		r.state = requestStateParsingHeaders
+		return n, nil
+	case requestStateParsingHeaders:
+		n, done, err := r.Headers.Parse(data)
+		if err != nil {
+			return 0, err
+		}
+		if n == 0 {
+			return 0, nil
+		}
+		if done {
+			r.state = requestStateParsingBody
+		}
+		return n, nil 
+	case requestStateParsingBody:
+		bodyLength, exists := r.Headers.Get("content-length")
+		contentLength, err := strconv.Atoi(bodyLength)
+		if !exists || contentLength < 1 {
+			r.state = requestStateDone
+			return 0, nil
+		}
+		body, n, err := parseBody(data, contentLength)
+		if err != nil {
+			return 0, err
+		}
+		if n == 0 {
+			return 0, nil
+		}
+		if n != contentLength {
+			return 0, fmt.Errorf("Error: body length does not match content-length: %d", contentLength)
+		}
+		r.Body = body
+		r.state = requestStateDone
+		return n, nil	
+	default:
+		return 0, fmt.Errorf("Error: unknown parse state: %d", r.state)
+	}
+}
+
+func parseBody(data []byte, length int) ([]byte, int, error) {
+	if len(data) > length {
+		return nil, 0, fmt.Errorf("Error: body length (%d) greater than content-length (%d)", len(data), length)
+	}
+	if len(data) < length {
+		// need more data
+		return nil, 0, nil
+	}
+	buf := make([]byte, length)
+	copy(buf, data[:length])
+	return buf, length, nil
 }
 
 func parseRequestLine(data []byte) (*RequestLine, int, error) {
