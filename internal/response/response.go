@@ -15,6 +15,7 @@ const (
 	WriteStateStatusLine WriteState = iota
 	WriteStateHeaders
 	WriteStateBody
+	WriteStateTrailers
 	WriteStateDone
 )
 
@@ -38,6 +39,8 @@ func writeStateToString(state WriteState) string {
 		return "writeStateHeaders"
 	case WriteStateBody:
 		return "writeStateBody"
+	case WriteStateTrailers:
+		return "writeStateTrailers"
 	case WriteStateDone:
 		return "writeStateDone"
 	default:
@@ -74,7 +77,7 @@ func (w *Writer) WriteBody(p []byte) (int, error) {
 	if w.State != WriteStateBody {
 		return 0, fmt.Errorf("Error: attempting to write body when state is %s", writeStateToString(w.State))
 	}
-	defer func() {w.State = WriteStateDone}()
+	defer func() {w.State = WriteStateTrailers}()
 	return w.Writer.Write(p)
 }
 
@@ -107,5 +110,36 @@ func (w *Writer) WriteChunkedBody(p []byte) (int, error) {
 }
 
 func (w *Writer) WriteChunkedBodyDone() (int, error) {
-	return w.Writer.Write([]byte("0\r\n\r\n"))
+	defer func() {w.State = WriteStateTrailers}()
+	return w.Writer.Write([]byte("0\r\n"))
+}
+
+func (w *Writer) FinalizeChunkedResponse() error {
+	if w.State == WriteStateTrailers {
+		// No trailers were written, so write the final crlf
+		_, err := w.Writer.Write([]byte(crlf))
+		if err != nil {
+			return err
+		}
+		w.State = WriteStateDone
+	}
+	return nil
+}
+
+func (w *Writer) WriteTrailers(h headers.Headers) error {
+	if w.State != WriteStateTrailers {
+		return fmt.Errorf("Error: attempting to write trailers when state is %s", writeStateToString(w.State))
+	}
+	defer func() { w.State = WriteStateDone }()
+	for k, v := range h {
+		canonicalName := http.CanonicalHeaderKey(k)
+		fmt.Printf("Writing trailer: %s: %s%s", canonicalName, v, crlf)
+		_, err := fmt.Fprintf(w.Writer, "%s: %s%s", canonicalName, v, crlf)
+		if err != nil {
+			return err
+		}
+	}
+
+	_, err := fmt.Fprintf(w.Writer, crlf)
+	return err
 }
