@@ -48,20 +48,28 @@ func (h Headers) Parse(data []byte) (n int, done bool, err error) {
 		return 0, false, fmt.Errorf("Error: Invalid header name: %s", key)
 	}
 
-	h.Set(strings.ToLower(key), string(value))
+	h.Set(key, string(value))
 	return idx+2, false, nil
 }
 
 func (h Headers) Set(key, value string) {
 	existingValue, exists := h[key]
 	if exists {
-		h[key] = existingValue + ", " + value
+		h[strings.ToLower(key)] = existingValue + ", " + value
 	} else {
-		h[key] = value
+		h[strings.ToLower(key)] = value
 	}
+}
+
+func (h Headers) Override(key, value string) {
+	h[strings.ToLower(key)] = value
 }
 
 func (h Headers) Get(key string) (string, bool) {
 	value, exists := h[strings.ToLower(key)]
 	return value, exists
+}
+
+func (h Headers) Remove(key string) {
+	delete(h, strings.ToLower(key))
 }
