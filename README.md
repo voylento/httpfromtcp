@@ -1,6 +1,6 @@
 # HTTPFROMTCP
 
-This is the code I developed for the [Boot.dev](https://www.boot.dev) project [Learn the HTTP Protocol in Go](https://www.boot.dev/courses/learn-http-protocol-golang). The project aimed to demystify the inner workings of how http libraries in languages like Go work. This is a project that builds a simplistic http 1.1 library on top of tcp. The course was developed by [ThePrimeagen](https://github.com/ThePrimeagen) for [Boot.dev](https://www.boot.dev)
+This is the code I developed while going through the [Boot.dev](https://www.boot.dev) course [Learn the HTTP Protocol in Go](https://www.boot.dev/courses/learn-http-protocol-golang). The project aimed to demystify the inner workings of how http libraries work. In this course, the students developed a simplistic HTTP/1.1 library on top of Go's TCP libraries. The course was developed by [ThePrimeagen](https://github.com/ThePrimeagen) for [Boot.dev](https://www.boot.dev).
 
 ## Get the Code
 
@@ -8,9 +8,12 @@ In the usual way: `git clone git@github.com:voylento/httpfromtcp.git`
 
 ## Run the code
 
-Really? You want to run this code? Just go sign up at [Boot.dev](https://www.boot.dev) and do the course yourself. This is for learning. Yes, I put my learning projects on github (sometimes).
+Really? You want to run this code? Just go sign up at [Boot.dev](https://www.boot.dev) and do the course yourself. This is for learning. You learn by thinking through the problem sets and doing the typity typity on the keyboardy (in neovim, for best results).
 
-Requirements: 1) obviously, you have Go installed; 2) you have curl installed
+### Dependencies 
+- Go installed (go1.22+)
+- curl
+- (optional) netcat. Useful for inspecting the proxied chunked responses for the part of the course that covers chunking.
 
 From the project root:
 
